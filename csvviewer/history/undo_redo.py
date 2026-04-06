@@ -66,7 +66,7 @@ class EditHistory:
     """
 
     def __init__(self, max_history: int = 100) -> None:
-        """Initialise an empty edit history.
+        """Initialize an empty edit history.
 
         Args:
             max_history: Maximum number of undo steps to keep.  When this
