@@ -1,1 +1,3 @@
-from csvviewer.app import main; main()
+from csvviewer.app import main
+
+main()
