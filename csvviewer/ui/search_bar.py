@@ -2,7 +2,7 @@
 
 from PySide6.QtWidgets import (QWidget, QHBoxLayout, QLineEdit, QPushButton,
                                 QComboBox, QCheckBox, QLabel)
-from PySide6.QtCore import Signal, Qt
+from PySide6.QtCore import Signal
 
 
 class SearchBar(QWidget):

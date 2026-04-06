@@ -66,7 +66,7 @@ FILTER_OPERATORS = {
     "text": {op.name: op.value for op in TextFilterOp},
 }
 
-# Keyboard shortcut mappings (platform-aware modifier is handled by Qt)
+# Keyboard shortcut mappings (aligned with toolbar.py and README)
 KEYBOARD_SHORTCUTS = {
     "open_file": "Ctrl+O",
     "save": "Ctrl+S",
@@ -80,11 +80,10 @@ KEYBOARD_SHORTCUTS = {
     "paste": "Ctrl+V",
     "cut": "Ctrl+X",
     "select_all": "Ctrl+A",
-    "find": "Ctrl+F",
-    "find_replace": "Ctrl+H",
+    "filter": "Ctrl+F",
+    "search": "Ctrl+H",
     "goto_row": "Ctrl+G",
-    "filter": "Ctrl+L",
-    "clear_filters": "Ctrl+Shift+L",
+    "clear_filters": "Ctrl+Shift+F",
     "column_stats": "Ctrl+I",
     "new_window": "Ctrl+N",
     "zoom_in": "Ctrl+=",

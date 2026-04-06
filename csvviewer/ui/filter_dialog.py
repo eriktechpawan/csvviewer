@@ -4,13 +4,12 @@ Supports value, numeric, and text filters with AND/OR combinations.
 """
 
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
+    QDialog, QVBoxLayout, QHBoxLayout,
     QComboBox, QLineEdit, QPushButton, QLabel, QCheckBox,
     QGroupBox, QScrollArea, QWidget, QRadioButton, QButtonGroup,
-    QMessageBox, QListWidget, QListWidgetItem
 )
-from PySide6.QtCore import Signal, Qt
-from csvviewer.utils.constants import ValueFilterOp, NumericFilterOp, TextFilterOp, ColumnType
+from PySide6.QtCore import Signal
+from csvviewer.utils.constants import ColumnType
 
 
 class FilterRow(QWidget):
@@ -185,7 +184,7 @@ class FilterRow(QWidget):
 class FilterDialog(QDialog):
     """Main filter dialog with multiple conditions."""
 
-    filters_applied = Signal(list)  # list of filter dicts
+    filters_applied = Signal(list, str)  # (list of filter dicts, logic: "AND"/"OR")
 
     def __init__(self, columns: list[str], column_types: dict,
                  current_filters: list = None, parent=None):
@@ -282,7 +281,8 @@ class FilterDialog(QDialog):
         filters = [row.get_filter() for row in self._filter_rows]
         # Remove filters with no meaningful operator
         filters = [f for f in filters if f.get('operator')]
-        self.filters_applied.emit(filters)
+        logic = self.get_logic()
+        self.filters_applied.emit(filters, logic)
         self.accept()
 
     def get_filters(self) -> list[dict]:

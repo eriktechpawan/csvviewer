@@ -1,6 +1,6 @@
 """Custom table view with smooth scrolling and context menus."""
 
-from PySide6.QtWidgets import QTableView, QHeaderView, QMenu, QAbstractItemView
+from PySide6.QtWidgets import QTableView, QHeaderView, QAbstractItemView
 from PySide6.QtCore import Qt, Signal
 
 

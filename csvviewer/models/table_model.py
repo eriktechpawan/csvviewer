@@ -201,6 +201,8 @@ class VirtualTableModel(QAbstractTableModel):
 
     def flags(self, index: QModelIndex):
         """Return item flags — editable when not in read-only mode."""
+        if not index.isValid():
+            return Qt.ItemFlag.NoItemFlags
         flags = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
         if not self._engine.read_only:
             flags |= Qt.ItemFlag.ItemIsEditable

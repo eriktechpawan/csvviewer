@@ -75,7 +75,7 @@ def main():
     if len(sys.argv) > 1:
         file_path = sys.argv[1]
         if os.path.exists(file_path):
-            window._load_file(file_path)
+            window.open_file(file_path)
 
     window.show()
     sys.exit(app.exec())

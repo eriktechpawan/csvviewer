@@ -1,7 +1,6 @@
 """Status bar showing row counts and file info."""
 
-from PySide6.QtWidgets import QStatusBar, QLabel, QWidget, QHBoxLayout
-from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QStatusBar, QLabel
 
 
 class CSVStatusBar(QStatusBar):

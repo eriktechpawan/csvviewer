@@ -40,6 +40,7 @@ class DataEngine:
         self._column_order: list[str] = []
         self._read_only: bool = False
         self._next_row_id: int = 0
+        self._filter_logic: str = "AND"  # "AND" or "OR"
 
     def connect(self):
         """Initialize a fresh DuckDB in-memory connection."""
@@ -86,6 +87,7 @@ class DataEngine:
             "auto_detect": True,
             "ignore_errors": True,
             "skip": skip_rows,
+            "encoding": encoding,
         }
 
         opt_parts: list[str] = []
@@ -214,7 +216,7 @@ class DataEngine:
     @property
     def is_loaded(self) -> bool:
         """Whether data has been loaded successfully."""
-        return self._conn is not None and self._total_rows > 0
+        return self._conn is not None and self._file_path is not None
 
     @property
     def read_only(self) -> bool:
@@ -229,22 +231,37 @@ class DataEngine:
     # SQL clause builders
     # ------------------------------------------------------------------
 
+    def _validate_column(self, col: str) -> bool:
+        """Validate that a column name exists in the loaded schema."""
+        return col in self._columns
+
+    def _safe_identifier(self, name: str) -> str:
+        """Escape a SQL identifier to prevent injection."""
+        return '"' + name.replace('"', '""') + '"'
+
     def _build_where_clause(self) -> str:
-        """Build a SQL WHERE clause from the currently active filters."""
+        """Build a SQL WHERE clause from the currently active filters.
+
+        Column names are validated against the loaded schema to prevent
+        SQL injection from user-controlled session data.
+        """
         if not self._filters:
             return ""
 
         clauses: list[str] = []
         for f in self._filters:
             col = f["column"]
+            if not self._validate_column(col):
+                continue  # Skip filters referencing unknown columns
             op = f["operator"]
             value = f.get("value")
             value2 = f.get("value2")
             case_sensitive = f.get("case_sensitive", True)
 
-            qcol = f'"{col}"'
+            safe_col = self._safe_identifier(col)
+            qcol = safe_col
             if not case_sensitive:
-                qcol = f'LOWER(CAST("{col}" AS VARCHAR))'
+                qcol = f'LOWER(CAST({safe_col} AS VARCHAR))'
                 if isinstance(value, str):
                     value = value.lower()
 
@@ -255,7 +272,9 @@ class DataEngine:
         if not clauses:
             return ""
 
-        return "WHERE " + " AND ".join(clauses)
+        # Use the configured filter logic (AND/OR)
+        logic = getattr(self, '_filter_logic', 'AND')
+        return "WHERE " + f" {logic} ".join(clauses)
 
     @staticmethod
     def _sql_escape(v: str) -> str:
@@ -346,10 +365,20 @@ class DataEngine:
         return ""
 
     def _build_order_clause(self) -> str:
-        """Build a SQL ORDER BY clause from the current sort specification."""
+        """Build a SQL ORDER BY clause from the current sort specification.
+
+        Column names are validated against the schema.
+        """
         if not self._sort_columns:
             return "ORDER BY __row_id"
-        parts = [f'"{col}" {direction}' for col, direction in self._sort_columns]
+        parts = []
+        for col, direction in self._sort_columns:
+            if not self._validate_column(col):
+                continue
+            safe_dir = "ASC" if direction.upper() == "ASC" else "DESC"
+            parts.append(f'{self._safe_identifier(col)} {safe_dir}')
+        if not parts:
+            return "ORDER BY __row_id"
         return "ORDER BY " + ", ".join(parts)
 
     # ------------------------------------------------------------------
@@ -372,6 +401,9 @@ class DataEngine:
         user scrolls through the table.
         """
         cols = ", ".join(f'"{c}"' for c in self.visible_columns)
+        if not cols:
+            # All columns hidden — return only row IDs
+            cols = "1"
         where = self._build_where_clause()
         order = self._build_order_clause()
 
@@ -401,13 +433,15 @@ class DataEngine:
     # Filters
     # ------------------------------------------------------------------
 
-    def set_filters(self, filters: list[dict]):
+    def set_filters(self, filters: list[dict], logic: str = "AND"):
         """Set the active filters, replacing any existing ones.
 
         Each filter dict must contain at minimum *column* and *operator*
         keys.  Optional keys: *value*, *value2*, *case_sensitive*.
+        *logic* controls combination: ``"AND"`` or ``"OR"``.
         """
         self._filters = list(filters)
+        self._filter_logic = logic if logic in ("AND", "OR") else "AND"
 
     def add_filter(
         self,
@@ -938,8 +972,21 @@ class DataEngine:
         where = self._build_where_clause()
 
         if selected_row_ids:
-            id_list = ", ".join(str(int(r)) for r in selected_row_ids)
-            extra = f"__row_id IN ({id_list})"
+            # Use a temporary table for large ID sets to avoid SQL length limits
+            self._conn.execute(
+                "CREATE TEMPORARY TABLE IF NOT EXISTS _export_ids "
+                "(id BIGINT)"
+            )
+            self._conn.execute("DELETE FROM _export_ids")
+            # Insert IDs in batches
+            batch_size = 1000
+            for i in range(0, len(selected_row_ids), batch_size):
+                batch = selected_row_ids[i:i + batch_size]
+                values = ", ".join(f"({int(r)})" for r in batch)
+                self._conn.execute(
+                    f"INSERT INTO _export_ids VALUES {values}"
+                )
+            extra = f"__row_id IN (SELECT id FROM _export_ids)"
             if where:
                 where += f" AND {extra}"
             else:
