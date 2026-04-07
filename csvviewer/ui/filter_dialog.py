@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QGroupBox, QScrollArea, QWidget, QRadioButton, QButtonGroup,
 )
 from PySide6.QtCore import Signal
+from typing import Optional
 from csvviewer.utils.constants import ColumnType
 
 
@@ -132,11 +133,34 @@ class FilterRow(QWidget):
 
         self._case_check.setVisible(op in text_ops)
 
-    def get_filter(self) -> dict:
-        """Get filter specification as dict."""
+    def get_filter(self) -> Optional[dict]:
+        """Get filter specification as dict.
+
+        Returns ``None`` if the operator requires a value but none was
+        provided, preventing incomplete filters from being emitted.
+        """
         op = self._op_combo.currentData()
         value = self._value1.text().strip()
         value2 = self._value2.text().strip()
+
+        # Operators that require no value
+        no_value_ops = {'IS_EMPTY', 'NOT_EMPTY', 'IS_NULL', 'NOT_NULL',
+                        'IS_ZERO', 'NON_ZERO', 'POSITIVE', 'NEGATIVE'}
+
+        # Operators that require two values
+        two_value_ops = {'BETWEEN', 'OUTSIDE_RANGE'}
+
+        # Operators that require a single value
+        single_value_ops = {
+            'EQUALS', 'NOT_EQUALS', 'GT', 'GTE', 'LT', 'LTE',
+            'CONTAINS', 'NOT_CONTAINS', 'STARTS_WITH', 'ENDS_WITH',
+            'EXACT_MATCH', 'REGEX', 'LIKE', 'NOT_LIKE',
+        }
+
+        if op in single_value_ops and not value:
+            return None
+        if op in two_value_ops and (not value or not value2):
+            return None
 
         # Try to convert to number for numeric ops
         numeric_ops = {'GT', 'GTE', 'LT', 'LTE', 'BETWEEN', 'OUTSIDE_RANGE',
@@ -279,8 +303,8 @@ class FilterDialog(QDialog):
 
     def _apply(self):
         filters = [row.get_filter() for row in self._filter_rows]
-        # Remove filters with no meaningful operator
-        filters = [f for f in filters if f.get('operator')]
+        # Remove None / incomplete filters
+        filters = [f for f in filters if f is not None and f.get('operator')]
         logic = self.get_logic()
         self.filters_applied.emit(filters, logic)
         self.accept()

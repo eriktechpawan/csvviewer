@@ -28,7 +28,17 @@ class MainToolBar(QToolBar):
         self._create_actions()
 
     def _create_actions(self):
-        # File actions
+        self._create_file_actions()
+        self.addSeparator()
+        self._create_edit_actions()
+        self.addSeparator()
+        self._create_rowcol_actions()
+        self.addSeparator()
+        self._create_view_actions()
+        self.addSeparator()
+        self._create_tools_actions()
+
+    def _create_file_actions(self):
         self._open_action = QAction("📂 Open", self)
         self._open_action.setShortcut("Ctrl+O")
         self._open_action.triggered.connect(self.open_file)
@@ -49,9 +59,7 @@ class MainToolBar(QToolBar):
         self._export_action.triggered.connect(self.export)
         self.addAction(self._export_action)
 
-        self.addSeparator()
-
-        # Edit actions
+    def _create_edit_actions(self):
         self._undo_action = QAction("↩ Undo", self)
         self._undo_action.setShortcut("Ctrl+Z")
         self._undo_action.triggered.connect(self.undo)
@@ -62,9 +70,7 @@ class MainToolBar(QToolBar):
         self._redo_action.triggered.connect(self.redo)
         self.addAction(self._redo_action)
 
-        self.addSeparator()
-
-        # Row/Column actions
+    def _create_rowcol_actions(self):
         self._add_row_action = QAction("➕ Add Row", self)
         self._add_row_action.triggered.connect(self.add_row)
         self.addAction(self._add_row_action)
@@ -78,9 +84,7 @@ class MainToolBar(QToolBar):
         self._add_col_action.triggered.connect(self.add_column)
         self.addAction(self._add_col_action)
 
-        self.addSeparator()
-
-        # View actions
+    def _create_view_actions(self):
         self._filter_action = QAction("🔍 Filter", self)
         self._filter_action.setShortcut("Ctrl+F")
         self._filter_action.triggered.connect(self.toggle_filter)
@@ -91,9 +95,7 @@ class MainToolBar(QToolBar):
         self._search_action.triggered.connect(self.toggle_search)
         self.addAction(self._search_action)
 
-        self.addSeparator()
-
-        # Tools
+    def _create_tools_actions(self):
         self._cleanup_action = QAction("🧹 Cleanup", self)
         self._cleanup_action.triggered.connect(self.cleanup_tools)
         self.addAction(self._cleanup_action)

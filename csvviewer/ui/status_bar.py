@@ -35,6 +35,8 @@ class CSVStatusBar(QStatusBar):
         self._columns_label.setText(f"Columns: {columns}")
         if file_size:
             self._file_label.setText(f"Size: {file_size}")
+        else:
+            self._file_label.setText("")
 
     def set_status(self, text: str):
         self._status_label.setText(text)

@@ -96,7 +96,7 @@ class DataLoadWorker(_CancellableThread):
 
     def run(self):
         try:
-            result = self.load_fn(self.file_path, self._emit_progress)
+            result = self.load_fn(self.file_path, progress_callback=self._emit_progress)
             if not self._cancelled:
                 self.finished_with_result.emit(result)
         except Exception:

@@ -72,15 +72,20 @@ class CSVTableView(QTableView):
         self.selection_changed_signal.emit()
 
     def get_selected_rows(self) -> list[int]:
-        """Get unique selected row indices."""
-        return list(set(idx.row() for idx in self.selectionModel().selectedIndexes()))
+        """Get unique selected row indices in ascending order."""
+        return sorted(set(idx.row() for idx in self.selectionModel().selectedIndexes()))
 
     def get_selected_columns(self) -> list[int]:
-        """Get unique selected column indices."""
-        return list(set(idx.column() for idx in self.selectionModel().selectedIndexes()))
+        """Get unique selected column indices in ascending order."""
+        return sorted(set(idx.column() for idx in self.selectionModel().selectedIndexes()))
 
     def freeze_column(self, col: int):
-        """Freeze a column (make it always visible on left)."""
-        self.horizontalHeader().moveSection(
-            self.horizontalHeader().visualIndex(col), 0
-        )
+        """Freeze a column (make it always visible on left).
+
+        Does nothing if the column index is out of range.
+        """
+        header = self.horizontalHeader()
+        n = header.count()
+        if not isinstance(col, int) or col < 0 or col >= n:
+            return
+        header.moveSection(header.visualIndex(col), 0)

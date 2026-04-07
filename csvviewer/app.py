@@ -74,8 +74,10 @@ def main():
     # Handle file argument (open CSV directly)
     if len(sys.argv) > 1:
         file_path = sys.argv[1]
-        if os.path.exists(file_path):
+        if os.path.isfile(file_path):
             window.open_file(file_path)
+        else:
+            print(f"Warning: '{file_path}' is not a valid file, ignoring.")
 
     window.show()
     sys.exit(app.exec())

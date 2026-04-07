@@ -10,6 +10,7 @@ Architecture:
 
 import duckdb
 import os
+import re
 from typing import Optional, Any
 
 from csvviewer.utils.constants import ColumnType
@@ -76,6 +77,14 @@ class DataEngine:
         self.connect()
         self._file_path = file_path
         self._file_size = os.path.getsize(file_path)
+
+        # Reset per-file state so stale filters/sorts from a previous
+        # file don't persist
+        self._filters.clear()
+        self._sort_columns.clear()
+        self._hidden_columns.clear()
+        self._column_types.clear()
+        self._filter_logic = "AND"
 
         if progress_callback:
             progress_callback(10)
@@ -272,9 +281,24 @@ class DataEngine:
         if not clauses:
             return ""
 
-        # Use the configured filter logic (AND/OR)
+        # Use per-filter connector if available, falling back to global logic
         logic = getattr(self, '_filter_logic', 'AND')
-        return "WHERE " + f" {logic} ".join(clauses)
+
+        # If filters carry per-filter connector info, use it
+        connectors = []
+        for f in self._filters:
+            connectors.append(f.get("connector", logic))
+
+        # Build expression: first clause has no preceding connector
+        parts = [clauses[0]]
+        for i in range(1, len(clauses)):
+            conn = connectors[i] if i < len(connectors) else logic
+            if conn not in ("AND", "OR"):
+                conn = logic
+            parts.append(f" {conn} ")
+            parts.append(clauses[i])
+
+        return "WHERE " + "".join(parts)
 
     @staticmethod
     def _sql_escape(v: str) -> str:
@@ -285,6 +309,7 @@ class DataEngine:
         self, qcol: str, op: str, value: Any, value2: Any, raw_col: str
     ) -> str:
         """Convert a single filter specification to a SQL clause."""
+        safe_raw = self._safe_identifier(raw_col)
 
         def sql_val(v: Any) -> str:
             if v is None:
@@ -306,18 +331,18 @@ class DataEngine:
             return f"{qcol} NOT IN ({vals})"
         if op == "IS_EMPTY":
             return (
-                f'(CAST("{raw_col}" AS VARCHAR) = \'\' '
-                f'OR "{raw_col}" IS NULL)'
+                f'(CAST({safe_raw} AS VARCHAR) = \'\' '
+                f'OR {safe_raw} IS NULL)'
             )
         if op == "NOT_EMPTY":
             return (
-                f'(CAST("{raw_col}" AS VARCHAR) != \'\' '
-                f'AND "{raw_col}" IS NOT NULL)'
+                f'(CAST({safe_raw} AS VARCHAR) != \'\' '
+                f'AND {safe_raw} IS NOT NULL)'
             )
         if op == "IS_NULL":
-            return f'"{raw_col}" IS NULL'
+            return f'{safe_raw} IS NULL'
         if op == "NOT_NULL":
-            return f'"{raw_col}" IS NOT NULL'
+            return f'{safe_raw} IS NOT NULL'
 
         # --- Numeric filters ---
         if op == "GT":
@@ -400,7 +425,7 @@ class DataEngine:
         given *offset* are retrieved.  The UI calls this method as the
         user scrolls through the table.
         """
-        cols = ", ".join(f'"{c}"' for c in self.visible_columns)
+        cols = ", ".join(self._safe_identifier(c) for c in self.visible_columns)
         if not cols:
             # All columns hidden — return only row IDs
             cols = "1"
@@ -525,7 +550,7 @@ class DataEngine:
         applicable), and the top-10 most frequent values.
         """
         where = self._build_where_clause()
-        col = f'"{column}"'
+        col = self._safe_identifier(column)
         col_type = self._column_types.get(column, ColumnType.TEXT)
 
         stats: dict[str, Any] = {
@@ -639,7 +664,7 @@ class DataEngine:
         self._next_row_id += 1
 
         if values:
-            cols = ["__row_id"] + [f'"{c}"' for c in values.keys()]
+            cols = ["__row_id"] + [self._safe_identifier(c) for c in values.keys()]
             placeholders = ", ".join(
                 ["$" + str(i + 1) for i in range(len(values) + 1)]
             )
@@ -668,7 +693,7 @@ class DataEngine:
             return []
 
         id_placeholders = ", ".join(["$" + str(i + 1) for i in range(len(row_ids))])
-        cols = ", ".join(f'"{c}"' for c in self._columns)
+        cols = ", ".join(self._safe_identifier(c) for c in self._columns)
 
         # Fetch data for undo before deleting
         rows = self._conn.execute(
@@ -697,7 +722,7 @@ class DataEngine:
         for row_dict in rows_data:
             cols = list(row_dict.keys())
             col_str = ", ".join(
-                f'"{c}"' if c != "__row_id" else c for c in cols
+                self._safe_identifier(c) if c != "__row_id" else c for c in cols
             )
             placeholders = ", ".join(
                 ["$" + str(i + 1) for i in range(len(cols))]
@@ -711,7 +736,7 @@ class DataEngine:
     def duplicate_rows(self, row_ids: list[int]) -> list[int]:
         """Duplicate the specified rows.  Returns the new ``__row_id`` values."""
         new_ids: list[int] = []
-        cols = ", ".join(f'"{c}"' for c in self._columns)
+        cols = ", ".join(self._safe_identifier(c) for c in self._columns)
 
         for rid in row_ids:
             row = self._conn.execute(
@@ -811,7 +836,7 @@ class DataEngine:
 
         Returns the number of rows removed.
         """
-        cols = ", ".join(f'"{c}"' for c in self._columns)
+        cols = ", ".join(self._safe_identifier(c) for c in self._columns)
         before = self._total_rows
 
         self._conn.execute(
@@ -843,16 +868,17 @@ class DataEngine:
 
         Returns the number of rows affected.
         """
+        safe_col = self._safe_identifier(column)
         result = self._conn.execute(
             f"SELECT COUNT(*) FROM {self.TABLE_NAME} "
-            f'WHERE CAST("{column}" AS VARCHAR) != TRIM(CAST("{column}" AS VARCHAR))'
+            f'WHERE CAST({safe_col} AS VARCHAR) != TRIM(CAST({safe_col} AS VARCHAR))'
         ).fetchone()
         affected = result[0]
 
         if affected > 0:
             self._conn.execute(
                 f'UPDATE {self.TABLE_NAME} '
-                f'SET "{column}" = TRIM(CAST("{column}" AS VARCHAR))'
+                f'SET {safe_col} = TRIM(CAST({safe_col} AS VARCHAR))'
             )
 
         return affected
@@ -868,31 +894,36 @@ class DataEngine:
 
         Returns the number of rows that contained at least one match.
         """
+        safe_col = self._safe_identifier(column)
         escaped_find = self._sql_escape(find)
         escaped_replace = self._sql_escape(replace)
 
         if case_sensitive:
             count = self._conn.execute(
                 f"SELECT COUNT(*) FROM {self.TABLE_NAME} "
-                f"WHERE CAST(\"{column}\" AS VARCHAR) LIKE '%{escaped_find}%'"
+                f"WHERE CAST({safe_col} AS VARCHAR) LIKE '%{escaped_find}%'"
             ).fetchone()[0]
 
             self._conn.execute(
                 f'UPDATE {self.TABLE_NAME} '
-                f'SET "{column}" = REPLACE(CAST("{column}" AS VARCHAR), '
+                f'SET {safe_col} = REPLACE(CAST({safe_col} AS VARCHAR), '
                 f"'{escaped_find}', '{escaped_replace}')"
             )
         else:
             count = self._conn.execute(
                 f"SELECT COUNT(*) FROM {self.TABLE_NAME} "
-                f"WHERE LOWER(CAST(\"{column}\" AS VARCHAR)) "
+                f"WHERE LOWER(CAST({safe_col} AS VARCHAR)) "
                 f"LIKE '%{escaped_find.lower()}%'"
             ).fetchone()[0]
 
+            # Escape regex metacharacters so the find string is treated
+            # literally in the regexp_replace call.
+            regex_escaped_find = self._sql_escape(re.escape(find))
+
             self._conn.execute(
                 f'UPDATE {self.TABLE_NAME} '
-                f'SET "{column}" = regexp_replace(CAST("{column}" AS VARCHAR), '
-                f"'(?i){escaped_find}', '{escaped_replace}', 'g')"
+                f'SET {safe_col} = regexp_replace(CAST({safe_col} AS VARCHAR), '
+                f"'(?i){regex_escaped_find}', '{escaped_replace}', 'g')"
             )
 
         return count
@@ -967,7 +998,7 @@ class DataEngine:
         Returns the number of rows exported.
         """
         cols = columns or self.visible_columns
-        col_str = ", ".join(f'"{c}"' for c in cols)
+        col_str = ", ".join(self._safe_identifier(c) for c in cols)
 
         where = self._build_where_clause()
 

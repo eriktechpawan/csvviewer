@@ -5,6 +5,7 @@ A high-performance desktop CSV viewer and editor built with Python, PySide6, and
 ## Features
 
 ### Core
+
 - **Open CSV files** with auto-detection of delimiter, encoding, and header row
 - **Virtualized table** rendering — only visible rows are fetched from DuckDB, enabling smooth scrolling through millions of rows
 - **Powerful filtering** — value, numeric, and text filters with AND/OR combinations
@@ -16,6 +17,7 @@ A high-performance desktop CSV viewer and editor built with Python, PySide6, and
 - **Undo/redo** for all editing operations
 
 ### Data Quality
+
 - **Auto-detect column types** (text, integer, float, boolean, datetime)
 - **Missing/null value display** with visual indicators
 - **Data cleanup tools** — remove duplicates, trim whitespace, find & replace, type conversion
@@ -23,6 +25,7 @@ A high-performance desktop CSV viewer and editor built with Python, PySide6, and
 - **Auto-backup** before overwriting files
 
 ### Usability
+
 - **Dark mode** UI
 - **Keyboard shortcuts** for common actions
 - **Right-click context menus** on cells, rows, and column headers
@@ -35,7 +38,7 @@ A high-performance desktop CSV viewer and editor built with Python, PySide6, and
 
 ## Architecture
 
-```
+```text
 csvviewer/
 ├── app.py              # Application entry point
 ├── engine/
@@ -142,7 +145,7 @@ setup(
     app=['csvviewer/__main__.py'],
     options={'py2app': {
         'argv_emulation': True,
-        'packages': ['PySide6', 'duckdb', 'polars', 'chardet'],
+        'packages': ['PySide6', 'duckdb', 'chardet'],
         'iconfile': 'icon.icns',
     }},
     setup_requires=['py2app'],
@@ -159,7 +162,6 @@ python setup_mac.py py2app
 
 - PySide6 >= 6.6.0
 - duckdb >= 0.10.0
-- polars >= 0.20.0
 - chardet >= 5.0.0
 
 ## License

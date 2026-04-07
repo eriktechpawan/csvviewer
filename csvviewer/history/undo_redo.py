@@ -77,6 +77,7 @@ class EditHistory:
         self._max_history = max_history
         self._modified = False
         self._on_change: Optional[Callable] = None
+        self._saved_index: int = 0  # Stack depth at last save
 
     # ------------------------------------------------------------------
     # Properties
@@ -142,7 +143,13 @@ class EditHistory:
         self._redo_stack.clear()
         if len(self._undo_stack) > self._max_history:
             self._undo_stack.pop(0)
-        self._modified = True
+            # Adjust saved index — if it was tracking a position that
+            # was evicted, mark as permanently dirty
+            if self._saved_index > 0:
+                self._saved_index -= 1
+            else:
+                self._saved_index = -1  # Saved state evicted
+        self._modified = len(self._undo_stack) != self._saved_index
         if self._on_change:
             self._on_change()
 
@@ -159,7 +166,7 @@ class EditHistory:
             return None
         command = self._undo_stack.pop()
         self._redo_stack.append(command)
-        self._modified = bool(self._undo_stack)
+        self._modified = len(self._undo_stack) != self._saved_index
         if self._on_change:
             self._on_change()
         return command
@@ -177,7 +184,7 @@ class EditHistory:
             return None
         command = self._redo_stack.pop()
         self._undo_stack.append(command)
-        self._modified = True
+        self._modified = len(self._undo_stack) != self._saved_index
         if self._on_change:
             self._on_change()
         return command
@@ -186,10 +193,15 @@ class EditHistory:
         """Discard all undo and redo history and reset the modified flag."""
         self._undo_stack.clear()
         self._redo_stack.clear()
+        self._saved_index = 0
         self._modified = False
         if self._on_change:
             self._on_change()
 
     def mark_saved(self) -> None:
         """Mark the current state as saved, clearing the modified flag."""
+        self._saved_index = len(self._undo_stack)
+        old_modified = self._modified
         self._modified = False
+        if old_modified and self._on_change:
+            self._on_change()

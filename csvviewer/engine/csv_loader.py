@@ -84,7 +84,10 @@ def detect_has_header(file_path: str, encoding: str = 'utf-8',
                       delimiter: str = ',') -> bool:
     """Detect whether the CSV has a header row.
     
-    Uses csv.Sniffer.has_header().
+    Uses csv.Sniffer with the given delimiter to obtain a dialect,
+    then inspects the first two rows to decide if the first row is
+    a header (non-numeric labels vs numeric data).  Falls back to
+    csv.Sniffer.has_header() or ``True`` if parsing fails.
     """
     try:
         with open(file_path, 'r', encoding=encoding, errors='replace') as f:
@@ -93,7 +96,33 @@ def detect_has_header(file_path: str, encoding: str = 'utf-8',
                 if i >= 20:
                     break
                 sample += line
-        
+
+        # Try to sniff with the provided delimiter for an accurate dialect
+        try:
+            dialect = csv.Sniffer().sniff(sample, delimiters=delimiter)
+        except csv.Error:
+            dialect = None
+
+        # Parse first two rows with the dialect and compare types
+        if dialect is not None:
+            reader = csv.reader(sample.splitlines(), dialect=dialect)
+            rows = []
+            for row in reader:
+                rows.append(row)
+                if len(rows) >= 2:
+                    break
+            if len(rows) >= 2:
+                first, second = rows[0], rows[1]
+                # If first row is all non-numeric and second row has
+                # numerics, the first row is likely a header
+                first_numeric = sum(1 for v in first if v.replace('.', '', 1).lstrip('-').isdigit())
+                second_numeric = sum(1 for v in second if v.replace('.', '', 1).lstrip('-').isdigit())
+                if first_numeric == 0 and second_numeric > 0:
+                    return True
+                if first_numeric > 0 and len(first) == len(second):
+                    # Both rows look like data
+                    return False
+
         return csv.Sniffer().has_header(sample)
     except Exception:
         return True  # Assume header by default

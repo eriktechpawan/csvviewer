@@ -228,13 +228,18 @@ class VirtualTableModel(QAbstractTableModel):
         if value == "" or value == NULL_DISPLAY:
             value = None
 
-        self._engine.update_cell(row_id, col_name, value)
+        try:
+            self._engine.update_cell(row_id, col_name, value)
+        except Exception:
+            return False
 
-        # Invalidate cache for this chunk
-        chunk_idx = self._get_chunk_index(row)
-        self._chunk_cache.pop(chunk_idx, None)
+        # Clear caches and refresh — the edit may affect filter/sort
+        # membership, so a broader update is needed.
+        self._chunk_cache.clear()
+        self._row_id_map.clear()
+        self._row_count = self._engine.get_filtered_row_count()
 
-        self.dataChanged.emit(index, index)
+        self.layoutChanged.emit()
         return True
 
     def get_row_id(self, display_row: int) -> Optional[int]:
